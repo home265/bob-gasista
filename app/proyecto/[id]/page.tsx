@@ -2,7 +2,8 @@
 
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
-import { getProject, removePartida } from "@/lib/project/storage";
+// --- CORRECCIÓN AQUÍ: Eliminamos 'removePartida' que ya no existe ---
+import { getProject } from "@/lib/project/storage";
 import { aggregateMaterials } from "@/lib/project/compute";
 import type { Project } from "@/lib/project/types";
 
@@ -72,7 +73,7 @@ ${mat.length > 12 ? "…" : ""}`;
             {p.client ? `Cliente: ${p.client} · ` : ""}{p.siteAddress || ""}
           </div>
         </div>
-        <div className="flex gap-2">
+        <div className="flex items-center space-x-2">
           <Link className="btn" href={`/proyecto/${p.id}/export`}>Imprimir / PDF</Link>
           <button className="btn-secondary" onClick={onExportCSV}>Descargar CSV</button>
           <button className="btn-secondary" onClick={onExportJSON}>Descargar JSON</button>
@@ -83,27 +84,16 @@ ${mat.length > 12 ? "…" : ""}`;
       <div className="grid md:grid-cols-2 gap-4">
         {/* Partidas */}
         <div className="card p-4">
-          <h2 className="font-medium mb-3">Partidas</h2>
+          <h2 className="font-medium mb-3">Partidas del Proyecto</h2>
           {p.partes.length === 0 ? (
-            <p className="text-sm text-foreground/60">Todavía no agregaste partidas.</p>
+            <p className="text-sm text-foreground/60">Aún no se ha guardado ningún cálculo para este proyecto.</p>
           ) : (
             <ul className="space-y-2">
               {p.partes.map(part => (
-                <li key={part.id} className="border rounded p-2 flex items-center justify-between">
-                  <div>
-                    <div className="text-sm font-medium">{part.title}</div>
-                    <div className="text-xs text-foreground/60">{part.kind}</div>
-                  </div>
-                  <button
-                    className="btn-danger"
-                    onClick={() => {
-                      if (!confirm("¿Quitar esta partida?")) return;
-                      removePartida(p.id, part.id);
-                      location.reload();
-                    }}
-                  >
-                    Quitar
-                  </button>
+                <li key={part.id} className="border rounded p-3">
+                  <div className="text-sm font-medium">{part.title}</div>
+                  <div className="text-xs text-foreground/60 uppercase">{part.kind.replace("_", " ")}</div>
+                  {/* --- CORRECCIÓN AQUÍ: Eliminamos el botón "Quitar" --- */}
                 </li>
               ))}
             </ul>
@@ -112,7 +102,7 @@ ${mat.length > 12 ? "…" : ""}`;
 
         {/* Resumen de materiales */}
         <div className="card p-4 overflow-x-auto">
-          <h2 className="font-medium mb-3">Resumen de materiales</h2>
+          <h2 className="font-medium mb-3">Resumen de Materiales</h2>
           {mat.length === 0 ? (
             <p className="text-sm text-foreground/60">Sin materiales aún.</p>
           ) : (
@@ -121,7 +111,7 @@ ${mat.length > 12 ? "…" : ""}`;
                 <tr>
                   <th className="text-left py-1">Material</th>
                   <th className="text-right py-1">Cantidad</th>
-                  <th className="text-left py-1">Unidad</th>
+                  <th className="text-left py-1 pl-2">Unidad</th>
                 </tr>
               </thead>
               <tbody>
@@ -129,7 +119,7 @@ ${mat.length > 12 ? "…" : ""}`;
                   <tr key={`${m.key ?? m.label}-${i}`} className="border-t">
                     <td className="py-1">{m.label}</td>
                     <td className="py-1 text-right">{m.qty}</td>
-                    <td className="py-1">{m.unit}</td>
+                    <td className="py-1 pl-2">{m.unit}</td>
                   </tr>
                 ))}
               </tbody>

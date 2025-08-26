@@ -7,15 +7,12 @@ import {
   listProjects,
   createProject,
   removeProject,
-  setActiveProjectId,
-  getActiveProjectId,
 } from "@/lib/project/storage";
 
 export default function ProyectosPage() {
   const router = useRouter();
   const [list, setList] = useState<{ id: string; name: string }[]>([]);
   const [name, setName] = useState("");
-  const [activeId, setActiveId] = useState<string | null>(null);
 
   useEffect(() => {
     refreshList();
@@ -23,12 +20,10 @@ export default function ProyectosPage() {
 
   function refreshList() {
     setList(listProjects());
-    setActiveId(getActiveProjectId());
   }
 
   function handleCreateAndOpen() {
     const p = createProject({ name: name.trim() || "Proyecto sin nombre" });
-    setActiveProjectId(p.id);
     router.push(`/proyecto/${p.id}/calculo`);
   }
 
@@ -38,17 +33,10 @@ export default function ProyectosPage() {
     refreshList();
   }
 
-  function handleSetActive(id: string) {
-    // Si ya está activo, lo desactivamos. Si no, lo activamos.
-    const nextActiveId = activeId === id ? "" : id;
-    setActiveProjectId(nextActiveId);
-    refreshList();
-  }
-
   return (
     <section className="space-y-6">
       <div>
-        <h1 className="text-2xl font-semibold">Mis Instalaciones de Gas</h1>
+        <h1 className="text-2xl font-semibold">Mis Proyectos de Gas</h1>
         <p className="text-sm text-foreground/70">Crea un proyecto nuevo o continúa con uno existente.</p>
       </div>
 
@@ -76,21 +64,15 @@ export default function ProyectosPage() {
           <ul className="space-y-2">
             {list.map((p) => (
               <li key={p.id} className="border rounded p-3 flex items-center justify-between gap-4">
-                <div className="flex items-center gap-3">
-                  <span className="font-medium">{p.name}</span>
-                  {activeId === p.id && (
-                    <span className="text-[10px] px-2 py-0.5 rounded-full bg-green-800/50 text-green-300 border border-green-700/60">
-                      activo
-                    </span>
-                  )}
-                </div>
-                <div className="flex gap-2 flex-shrink-0">
+                <span className="font-medium">{p.name}</span>
+                {/* --- CORRECCIÓN AQUÍ --- */}
+                <div className="flex items-center space-x-2 flex-shrink-0">
                   <Link className="btn" href={`/proyecto/${p.id}/calculo`}>
-                    Ir a la Calculadora
+                    Editar/Ver Cálculo
                   </Link>
-                  <button className="btn-secondary" onClick={() => handleSetActive(p.id)}>
-                    {activeId === p.id ? "Quitar activo" : "Hacer activo"}
-                  </button>
+                  <Link className="btn-secondary" href={`/proyecto/${p.id}`}>
+                    Ver Resumen y Exportar
+                  </Link>
                   <button className="btn-danger" onClick={() => handleRemove(p.id)}>
                     Eliminar
                   </button>

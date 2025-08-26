@@ -2,7 +2,6 @@
 import type { Project, Partida, PartidaKind, MaterialRow } from "./types";
 
 const LS_KEY = "gascalc_projects_v1";
-const LS_ACTIVE = "gascalc_active_project_id";
 
 const hasWindow = () => typeof window !== "undefined" && !!window.localStorage;
 const now = () => Date.now();
@@ -25,9 +24,10 @@ function writeAll(list: Project[]) {
   window.localStorage.setItem(LS_KEY, JSON.stringify(list));
 }
 
-// ---- API de proyectos ----
+// ---- API de Proyectos (Simplificada) ----
+
 export function listProjects(): Array<Pick<Project, "id" | "name">> {
-  return readAll().map(({ id, name }) => ({ id, name }));
+  return readAll().map(({ id, name }) => ({ id, name })).sort((a, b) => a.name.localeCompare(b.name));
 }
 
 export function getProject(id: string): Project | null {
@@ -48,8 +48,6 @@ export function createProject(input: { name: string; client?: string; siteAddres
   };
   list.push(p);
   writeAll(list);
-  // si no había activo, lo seteamos
-  if (!getActiveProjectId()) setActiveProjectId(p.id);
   return p;
 }
 
@@ -58,13 +56,7 @@ export function updateProject(id: string, patch: Partial<Pick<Project, "name" | 
   const idx = list.findIndex((x) => x.id === id);
   if (idx < 0) return null;
   const curr = list[idx];
-  const next: Project = {
-    ...curr,
-    name: patch.name?.trim() || curr.name,
-    client: patch.client?.trim() ?? curr.client,
-    siteAddress: patch.siteAddress?.trim() ?? curr.siteAddress,
-    updatedAt: now(),
-  };
+  const next: Project = { ...curr, ...patch, updatedAt: now() };
   list[idx] = next;
   writeAll(list);
   return next;
@@ -73,25 +65,27 @@ export function updateProject(id: string, patch: Partial<Pick<Project, "name" | 
 export function removeProject(id: string) {
   const list = readAll().filter((x) => x.id !== id);
   writeAll(list);
-  if (getActiveProjectId() === id) setActiveProjectId(list[0]?.id ?? "");
 }
 
-// ---- Activo ----
-export function getActiveProjectId(): string | null {
-  if (!hasWindow()) return null;
-  return window.localStorage.getItem(LS_ACTIVE);
-}
-export function setActiveProjectId(id: string) {
-  if (!hasWindow()) return;
-  if (id) window.localStorage.setItem(LS_ACTIVE, id);
-  else window.localStorage.removeItem(LS_ACTIVE);
+// ---- API de Partidas (Específica para el Cálculo de Gas) ----
+
+/**
+ * Busca la partida de cálculo de gas dentro de un proyecto.
+ */
+export function getGasCalculation(projectId: string): Partida | null {
+    const p = getProject(projectId);
+    if (!p) return null;
+    // Solo puede haber una partida de gas por proyecto.
+    return p.partes.find(pt => pt.kind === "gas_instalacion") ?? null;
 }
 
-// ---- Partidas ----
-export function addPartida(
+/**
+ * Guarda o actualiza la partida de cálculo de gas de un proyecto.
+ * Si ya existe, la sobrescribe. Si no, la crea.
+ */
+export function saveOrUpdateGasCalculation(
   projectId: string,
   data: {
-    kind: PartidaKind;
     title: string;
     inputs: Record<string, unknown>;
     outputs: Record<string, unknown>;
@@ -99,76 +93,42 @@ export function addPartida(
   }
 ): Partida | null {
   const list = readAll();
-  const idx = list.findIndex((x) => x.id === projectId);
-  if (idx < 0) return null;
+  const projectIndex = list.findIndex((p) => p.id === projectId);
+  if (projectIndex < 0) return null;
 
-  const pt: Partida = {
-    id: crypto.randomUUID(),
-    kind: data.kind,
-    title: data.title.trim() || "(Sin título)",
-    inputs: data.inputs,
-    outputs: data.outputs,
-    materials: data.materials,
-    createdAt: now(),
-    updatedAt: now(),
-  };
+  const project = list[projectIndex];
+  const existingPartidaIndex = project.partes.findIndex(pt => pt.kind === "gas_instalacion");
 
-  const p = list[idx];
-  const next: Project = { ...p, partes: [...p.partes, pt], updatedAt: now() };
-  list[idx] = next;
-  writeAll(list);
-  return pt;
-}
-
-export function getPartida(projectId: string, partidaId: string): Partida | null {
-  const p = getProject(projectId);
-  if (!p) return null;
-  return p.partes.find((pt) => pt.id === partidaId) ?? null;
-}
-
-export function updatePartida(
-  projectId: string,
-  partidaId: string,
-  patch: Partial<Pick<Partida, "title" | "inputs" | "outputs" | "materials">>
-): Partida | null {
-  const list = readAll();
-  const pIdx = list.findIndex((x) => x.id === projectId);
-  if (pIdx < 0) return null;
-
-  const p = list[pIdx];
-  const ptIdx = p.partes.findIndex((pt) => pt.id === partidaId);
-  if (ptIdx < 0) return null;
-
-  const curr = p.partes[ptIdx];
-  const next: Partida = {
-    ...curr,
-    title: patch.title?.trim() || curr.title,
-    inputs: patch.inputs ?? curr.inputs,
-    outputs: patch.outputs ?? curr.outputs,
-    materials: patch.materials ?? curr.materials,
-    updatedAt: now(),
-  };
-
-  const nextProject: Project = {
-    ...p,
-    partes: p.partes.map((x, i) => (i === ptIdx ? next : x)),
-    updatedAt: now(),
-  };
-  list[pIdx] = nextProject;
-  writeAll(list);
-  return next;
-}
-
-export function removePartida(projectId: string, partidaId: string) {
-  const list = readAll();
-  const pIdx = list.findIndex((x) => x.id === projectId);
-  if (pIdx < 0) return;
-  const p = list[pIdx];
-  const next: Project = {
-    ...p,
-    partes: p.partes.filter((pt) => pt.id !== partidaId),
-    updatedAt: now(),
-  };
-  list[pIdx] = next;
-  writeAll(list);
+  if (existingPartidaIndex > -1) {
+    // --- ACTUALIZAR PARTIDA EXISTENTE ---
+    const currentPartida = project.partes[existingPartidaIndex];
+    const updatedPartida: Partida = {
+      ...currentPartida,
+      title: data.title.trim() || currentPartida.title,
+      inputs: data.inputs,
+      outputs: data.outputs,
+      materials: data.materials,
+      updatedAt: now(),
+    };
+    project.partes[existingPartidaIndex] = updatedPartida;
+    project.updatedAt = now();
+    writeAll(list);
+    return updatedPartida;
+  } else {
+    // --- CREAR NUEVA PARTIDA ---
+    const newPartida: Partida = {
+      id: crypto.randomUUID(),
+      kind: "gas_instalacion",
+      title: data.title.trim() || "Cálculo de Gas",
+      inputs: data.inputs,
+      outputs: data.outputs,
+      materials: data.materials,
+      createdAt: now(),
+      updatedAt: now(),
+    };
+    project.partes.push(newPartida);
+    project.updatedAt = now();
+    writeAll(list);
+    return newPartida;
+  }
 }
