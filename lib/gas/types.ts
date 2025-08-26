@@ -23,7 +23,8 @@ export type ApplianceCatalogItem = {
 };
 
 export type FittingsEquivalents = {
-  equiv_diameters: Record<"elbow_90" | "elbow_45" | "tee_through" | "tee_branch" | "valve", number>;
+  // Se agrega 'tee' para el nuevo modelo de cálculo
+  equiv_diameters: Record<"elbow_90" | "elbow_45" | "tee_through" | "tee_branch" | "valve" | "tee", number>;
 };
 
 export type CapacityTable = {
@@ -35,80 +36,82 @@ export type CapacityTable = {
 
 // --- NUEVOS TIPOS PARA EL FORMULARIO (lo que el usuario ingresa) ---
 
-// Representa un artefacto en la lista del formulario.
-export type GasApplianceInput = {
-  id: string; // Un ID único para el estado de React (ej: crypto.randomUUID())
-  label: string; // Etiqueta puesta por el usuario (ej: "Cocina Ppal")
-  catalogId: string; // ID del catálogo (ej: "cocina")
-  consumo_kcal_h: number;
-};
-
-// Representa un tramo en la lista del formulario. Es más simple que el anterior.
-export type GasSegmentInput = {
+// Representa una "boca" o punto de consumo en la instalación.
+export type BocaInput = {
   id: string; // ID único para el estado de React
-  label: string; // Etiqueta del tramo (ej: "Medidor a Cocina")
-  longitud_m: number;
+  planta: string; // Etiqueta de la planta donde se ubica (ej: "Planta Baja")
+  distancia_desde_anterior_m: number;
+  artefacto: {
+    catalogId: string; // ID del catálogo (ej: "cocina")
+    consumo_kcal_h: number;
+  };
   accesorios: {
     codos_90: number;
     codos_45: number;
-    llaves_paso: number;
+    tes: number; // Las "T" son importantes en ramales
   };
-  // El usuario define qué artefactos se conectan al final de este tramo.
-  artefactos_servidos: string[]; // Array de IDs de GasApplianceInput
 };
 
 // Este es el objeto completo que representa todos los datos del formulario.
-export type InstallationInput = {
+export type CalculoInput = {
   gasId: GasKind;
   pipeSystemId: string;
-  artefactos: GasApplianceInput[];
-  tramos: GasSegmentInput[];
+  plantas: string[];
+  bocas: BocaInput[];
 };
 
 
 // --- TIPOS PARA EL MOTOR DE CÁLCULO (lo que la lógica interna usa) ---
 
-// (Estos tipos se mantienen porque la lógica de cálculo es robusta,
-// solo que ahora se construyen a partir del `InstallationInput`)
-
-export type SegmentInternal = {
-  id: string;
-  real_length_m: number;
-  fittings?: Partial<Record<keyof FittingsEquivalents["equiv_diameters"], number>>;
-  downstream: Array<{ applianceId: string; distance_from_meter_m: number }>;
+// Representa un tramo de cañería entre dos puntos (ej: Nicho-Boca1, Boca1-Boca2).
+// El motor de cálculo creará estos tramos a partir de la lista de `BocaInput`.
+export type TramoCalculado = {
+  id: string; // ID de la boca final del tramo
+  label: string; // Etiqueta generada (ej: "Tramo Boca 1 -> Boca 2")
+  longitud_m: number;
+  accesorios: {
+    codos_90: number;
+    codos_45: number;
+    tes: number;
+  };
+  // El motor de cálculo determinará el consumo total que pasa por este tramo.
+  consumo_total_kcal_h: number; 
+  // Distancia total desde el medidor hasta el final de ESTE tramo.
+  distancia_acumulada_m: number;
 };
 
+// Datos de entrada para la función principal de cálculo, ahora más simple.
 export type JobInput = {
   gas: GasOption;
   system: PipeSystem;
   capacity: CapacityTable;
   fittingsEq: FittingsEquivalents;
-  appliancesCatalog: ApplianceCatalogItem[];
-  appliances: Array<{ id: string; catalogId: string; kcal_h: number }>;
-  segments: SegmentInternal[];
+  tramos: TramoCalculado[];
 };
 
-export type SegmentResult = {
+// El resultado para un tramo individual no cambia mucho.
+export type TramoResult = {
   id: string;
-  label: string; // Añadimos el label para mostrarlo en resultados
-  served_m3h: number;
-  worst_distance_m: number;
-  selected_dn: number;
-  effective_length_m: number;
-  capacity_m3h: number;
-  utilization: number;
+  label: string;
+  caudal_m3h: number;
+  distancia_acumulada_m: number;
+  longitud_equivalente_m: number;
+  diametro_dn: number;
+  capacidad_caño_m3h: number;
+  utilizacion: number;
   warning?: string;
 };
 
+// La lista de materiales (Bill of Materials) es más específica ahora.
 export type BomItem =
   | { kind: "pipe"; dn: number; length_m: number }
-  | { kind: "fitting"; type: keyof FittingsEquivalents["equiv_diameters"]; dn: number; qty: number }
+  | { kind: "fitting"; type: "codo_90" | "codo_45" | "te" | "reduccion"; dn: number; qty: number }
   | { kind: "accessory"; key: string; label: string; qty: number; unit: "u" | "m" };
 
 
 // --- TIPO DE RESULTADO FINAL (lo que la función de cálculo devuelve) ---
 export type ComputeResult = {
-  segmentResults: SegmentResult[];
+  tramoResults: TramoResult[];
   bom: BomItem[];
   total_m3h: number;
   total_kcalh: number;

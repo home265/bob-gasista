@@ -1,28 +1,27 @@
 // lib/gas/compute.ts
 import {
   // Catálogos
-  ApplianceCatalogItem,
   CapacityTable,
   FittingsEquivalents,
   GasOption,
   PipeSystem,
-  // Tipos para el formulario
-  InstallationInput,
-  GasSegmentInput,
-  // Tipos para el resultado
+  // Tipos para el formulario (NUEVOS)
+  CalculoInput,
+  // Tipos para el resultado (NUEVOS)
   BomItem,
   ComputeResult,
-  SegmentResult,
-  // Tipos internos del motor
+  TramoResult,
+  // Tipos internos del motor (NUEVOS)
   JobInput,
-  SegmentInternal,
+  TramoCalculado,
 } from "./types";
+import { GasCatalogs } from "../data/catalogs";
 
 // --- UTILIDADES BÁSICAS (sin cambios) ---
 const round2 = (n: number) => Math.round(n * 100) / 100;
 
 function kcalhToM3h(kcal_h: number, gas: GasOption): number {
-  const pc = gas.poder_calorifico_kcal_m3 || 9300;
+  const pc = gas.poder_calorifico_kcal_m3 || (gas.id === 'natural' ? 9300 : 22000);
   if (!Number.isFinite(kcal_h) || kcal_h <= 0) return 0;
   return kcal_h / pc;
 }
@@ -38,243 +37,178 @@ function dnCandidates(system: PipeSystem): number[] {
   return [...system.diameters_mm.map((d) => d.dn)].sort((a, b) => a - b);
 }
 
-// --- LÓGICA DE CÁLCULO DE DIÁMETROS (refactorizada) ---
+// --- LÓGICA DE CÁLCULO DE DIÁMETROS (adaptada) ---
 
 /**
  * Calcula la longitud equivalente de un tramo sumando las pérdidas de los accesorios.
  */
 function equivalentLengthForDN(
-  realLength_m: number,
-  fittings: Partial<Record<keyof FittingsEquivalents["equiv_diameters"], number>> | undefined,
+  tramo: TramoCalculado,
   dn_mm: number,
   fittingsEq: FittingsEquivalents
 ): number {
-  if (!fittings || Object.keys(fittings).length === 0) return realLength_m;
-
   const factors = fittingsEq.equiv_diameters;
   let addedLength_m = 0;
   
-  // Mapeamos los nombres de accesorios del formulario a los del motor de cálculo
-  const mapping: Record<string, keyof typeof factors> = {
-    codos_90: "elbow_90",
-    codos_45: "elbow_45",
-    llaves_paso: "valve",
+  const accessoryMap: Partial<Record<keyof typeof factors, number>> = {
+    elbow_90: tramo.accesorios.codos_90,
+    elbow_45: tramo.accesorios.codos_45,
+    tee: tramo.accesorios.tes,
   };
 
-  for (const key in fittings) {
-    const mappedKey = mapping[key];
-    if (mappedKey && factors[mappedKey]) {
-      const qty = fittings[key as keyof typeof fittings] ?? 0;
-      const nD = factors[mappedKey]; // ej: 30 diámetros
+  for (const key in accessoryMap) {
+    const typedKey = key as keyof typeof factors;
+    if (factors[typedKey]) {
+      const qty = accessoryMap[typedKey] ?? 0;
+      const nD = factors[typedKey]; // ej: 30 diámetros
       addedLength_m += (qty * nD * dn_mm) / 1000; // dn_mm -> m
     }
   }
 
-  return realLength_m + addedLength_m;
+  return tramo.longitud_m + addedLength_m;
 }
-
 
 /**
- * Calcula el diámetro óptimo y la utilización para un solo tramo de la red.
+ * Pre-procesa la entrada del formulario para convertir la lista de bocas en una
+ * lista de tramos calculables, con consumos y distancias acumuladas.
+ * Esta es una de las funciones clave de la nueva lógica.
  */
-function computeSegmentResult(
-  seg: SegmentInternal,
-  segLabel: string, // <-- Recibe el label del tramo
-  gas: GasOption,
-  system: PipeSystem,
-  capacity: CapacityTable,
-  fittingsEq: FittingsEquivalents,
-  m3hByApplianceId: Map<string, number>
-): SegmentResult {
-  const served_m3h = round2(
-    seg.downstream.reduce((acc, d) => acc + (m3hByApplianceId.get(d.applianceId) ?? 0), 0)
-  );
-  const worst_distance_m = seg.downstream.reduce((mx, d) => Math.max(mx, d.distance_from_meter_m), 0);
+function transformInputToTramos(input: CalculoInput): TramoCalculado[] {
+    const tramos: TramoCalculado[] = [];
+    let cumulativeKcalH = 0;
+    let cumulativeDistance = 0;
 
-  const dns = dnCandidates(system);
-  let chosen: { dn: number; Lcalc: number; cap: number } | null = null;
+    // Recorremos las bocas desde la más lejana (al final del array) hacia la más cercana
+    for (let i = input.bocas.length - 1; i >= 0; i--) {
+        const boca = input.bocas[i];
+        cumulativeKcalH += boca.artefacto.consumo_kcal_h;
+        cumulativeDistance += boca.distancia_desde_anterior_m;
 
-  for (const dn of dns) {
-    const Lcalc = equivalentLengthForDN(seg.real_length_m, seg.fittings, dn, fittingsEq);
-    const cap = capacityAtLength(capacity, dn, Lcalc);
-    if (cap >= served_m3h) {
-      chosen = { dn, Lcalc, cap };
-      break;
+        const label = i > 0 
+            ? `Tramo Boca ${i} a Boca ${i+1}`
+            : `Tramo Nicho a Boca 1`;
+
+        tramos.unshift({ // Añadimos al principio para mantener el orden original
+            id: boca.id,
+            label,
+            longitud_m: boca.distancia_desde_anterior_m,
+            accesorios: boca.accesorios,
+            consumo_total_kcal_h: cumulativeKcalH,
+            distancia_acumulada_m: cumulativeDistance,
+        });
     }
-  }
-
-  if (!chosen) {
-    const dn = dns[dns.length - 1];
-    const Lcalc = equivalentLengthForDN(seg.real_length_m, seg.fittings, dn, fittingsEq);
-    const cap = capacityAtLength(capacity, dn, Lcalc);
-    return {
-      id: seg.id,
-      label: segLabel,
-      served_m3h,
-      worst_distance_m,
-      selected_dn: dn,
-      effective_length_m: round2(Lcalc),
-      capacity_m3h: cap,
-      utilization: cap > 0 ? round2(served_m3h / cap) : 0,
-      warning: "La demanda supera la capacidad del mayor diámetro disponible.",
-    };
-  }
-
-  return {
-    id: seg.id,
-    label: segLabel,
-    served_m3h,
-    worst_distance_m,
-    selected_dn: chosen.dn,
-    effective_length_m: round2(chosen.Lcalc),
-    capacity_m3h: chosen.cap,
-    utilization: round2(served_m3h / chosen.cap),
-  };
+    return tramos;
 }
 
-// --- NUEVA LÓGICA DE TRANSFORMACIÓN ---
+// --- API PRINCIPAL (reescrita completamente) ---
 
-/**
- * Convierte la entrada del formulario (simple) a la estructura detallada
- * que necesita el motor de cálculo (JobInput).
- * Esta función es clave: construye la topología de la red.
- */
-function transformInputForComputation(
-  input: InstallationInput,
-  catalogs: {
-    gasOptions: GasOption[];
-    pipeSystems: PipeSystem[];
-    appliances: ApplianceCatalogItem[];
-    fittingsEquivalents: FittingsEquivalents;
-    capacityTables: CapacityTable[];
-  }
-): JobInput {
-  const gas = catalogs.gasOptions.find(g => g.id === input.gasId)!;
-  const system = catalogs.pipeSystems.find(s => s.id === input.pipeSystemId)!;
-  // TODO: Seleccionar la tabla de capacidad correcta según gas y presión
-  const capacity = catalogs.capacityTables[0]; 
-
-  const applianceMap = new Map(input.artefactos.map(a => [a.id, a]));
-
-  // 1. Calcular distancia acumulada para cada artefacto
-  const distances = new Map<string, number>();
-  for (const appliance of input.artefactos) {
-      let currentDistance = 0;
-      let currentApplianceId = appliance.id;
-      // Navegamos hacia atrás por los tramos hasta llegar al medidor
-      while (currentApplianceId) {
-          const servingSegment = input.tramos.find(t => t.artefactos_servidos.includes(currentApplianceId));
-          if (!servingSegment) break;
-          currentDistance += servingSegment.longitud_m;
-          // Asumimos que el tramo anterior sirve a un único artefacto "padre" o es el inicio.
-          // Esta lógica se podría mejorar si los tramos tuvieran "punto de inicio" y "punto final".
-          // Por ahora, funciona para una topología lineal.
-          break; // Simplificación para topología lineal
-      }
-      distances.set(appliance.id, currentDistance);
-  }
-
-  // 2. Construir los segmentos internos para el motor de cálculo
-  const segments: SegmentInternal[] = input.tramos.map(t => {
-    // Determinar todos los artefactos aguas abajo de este tramo
-    const downstreamAppliances = new Set<string>();
-    let toCheck = [...t.artefactos_servidos];
-    while(toCheck.length > 0){
-        const current = toCheck.pop()!;
-        if(!downstreamAppliances.has(current)){
-            downstreamAppliances.add(current);
-            // Buscar tramos que salgan de este artefacto
-            const childSegments = input.tramos.filter(s => s.artefactos_servidos.includes(current)); // Simplificación
-        }
-    }
-
-
-    return {
-      id: t.id,
-      real_length_m: t.longitud_m,
-      fittings: {
-        elbow_90: t.accesorios.codos_90,
-        elbow_45: t.accesorios.codos_45,
-        valve: t.accesorios.llaves_paso,
-      },
-      downstream: Array.from(downstreamAppliances).map(appId => ({
-        applianceId: appId,
-        distance_from_meter_m: distances.get(appId) || 0,
-      }))
-    };
-  });
-
-  return {
-    gas,
-    system,
-    capacity,
-    fittingsEq: catalogs.fittingsEquivalents,
-    appliancesCatalog: catalogs.appliances,
-    appliances: input.artefactos.map(a => ({ id: a.id, catalogId: a.catalogId, kcal_h: a.consumo_kcal_h })),
-    segments,
-  };
-}
-
-
-// --- API PRINCIPAL REFACTORIZADA ---
 export function computeGasInstallation(
-  input: InstallationInput,
-  catalogs: any // Usaremos 'any' temporalmente para los catálogos completos
+  input: CalculoInput,
+  catalogs: GasCatalogs
 ): ComputeResult {
 
-  const jobInput = transformInputForComputation(input, catalogs);
-  const { gas, system, capacity, fittingsEq, segments } = jobInput;
+  // 1. Seleccionar los catálogos correctos
+  const gas = catalogs.gasOptions.find(g => g.id === input.gasId)!;
+  const system = catalogs.pipeSystems.find(s => s.id === input.pipeSystemId)!;
+  const capacity = catalogs.capacityTables.find(t => t.gas === input.gasId)!;
+  const fittingsEq = catalogs.fittingsEquivalents;
+  const dns = dnCandidates(system);
 
-  // 1. m³/h por ID de artefacto
-  const m3hByApplianceId = new Map<string, number>();
-  let total_kcalh = 0;
-  for (const a of jobInput.appliances) {
-    const m3h = kcalhToM3h(a.kcal_h, gas);
-    m3hByApplianceId.set(a.id, m3h);
-    total_kcalh += a.kcal_h;
-  }
-  const total_m3h = round2(Array.from(m3hByApplianceId.values()).reduce((sum, val) => sum + val, 0));
+  // 2. Transformar la entrada de usuario en tramos calculables
+  const tramosCalculados = transformInputToTramos(input);
+  const total_kcalh = tramosCalculados[0]?.consumo_total_kcal_h || 0;
+  const total_m3h = kcalhToM3h(total_kcalh, gas);
 
-  // 2. Calcular cada tramo
-  const segmentResults: SegmentResult[] = segments.map(s => {
-      const segmentInputOriginal = input.tramos.find(t => t.id === s.id)!;
-      return computeSegmentResult(s, segmentInputOriginal.label, gas, system, capacity, fittingsEq, m3hByApplianceId)
-  });
+  // 3. Calcular el diámetro y resultado para cada tramo
+  const tramoResults: TramoResult[] = tramosCalculados.map(tramo => {
+    const caudal_m3h = kcalhToM3h(tramo.consumo_total_kcal_h, gas);
+    let chosen: { dn: number; Lcalc: number; cap: number } | null = null;
 
-  // 3. Generar BOM (Lista de Materiales)
-  const bom: BomItem[] = [];
-  segmentResults.forEach(res => {
-    const segInput = input.tramos.find(t => t.id === res.id)!;
+    for (const dn of dns) {
+      const Lcalc = equivalentLengthForDN(tramo, dn, fittingsEq);
+      const cap = capacityAtLength(capacity, dn, tramo.distancia_acumulada_m); // La capacidad se mira con la distancia total
+      if (cap >= caudal_m3h) {
+        chosen = { dn, Lcalc, cap };
+        break;
+      }
+    }
     
-    // Cañerías
-    const pipeItem = bom.find(b => b.kind === 'pipe' && b.dn === res.selected_dn) as Extract<BomItem, {kind: "pipe"}> | undefined;
-    if (pipeItem) {
-      pipeItem.length_m = round2(pipeItem.length_m + segInput.longitud_m);
-    } else {
-      bom.push({ kind: 'pipe', dn: res.selected_dn, length_m: segInput.longitud_m });
+    // Si no se encontró un diámetro, se usa el más grande y se emite una advertencia
+    if (!chosen) {
+      const dn = dns[dns.length - 1];
+      const Lcalc = equivalentLengthForDN(tramo, dn, fittingsEq);
+      const cap = capacityAtLength(capacity, dn, tramo.distancia_acumulada_m);
+      return {
+        id: tramo.id,
+        label: tramo.label,
+        caudal_m3h: round2(caudal_m3h),
+        distancia_acumulada_m: round2(tramo.distancia_acumulada_m),
+        longitud_equivalente_m: round2(Lcalc),
+        diametro_dn: dn,
+        capacidad_caño_m3h: cap,
+        utilizacion: cap > 0 ? round2(caudal_m3h / cap) : 0,
+        warning: "La demanda supera la capacidad del mayor diámetro disponible.",
+      };
     }
 
-    // Accesorios del tramo
-    for (const key in segInput.accesorios) {
-        const type = key as keyof typeof segInput.accesorios;
-        const qty = segInput.accesorios[type];
-        if (qty > 0) {
-            bom.push({ kind: 'fitting', type: 'valve', dn: res.selected_dn, qty }); // Simplificado
-        }
+    return {
+      id: tramo.id,
+      label: tramo.label,
+      caudal_m3h: round2(caudal_m3h),
+      distancia_acumulada_m: round2(tramo.distancia_acumulada_m),
+      longitud_equivalente_m: round2(chosen.Lcalc),
+      diametro_dn: chosen.dn,
+      capacidad_caño_m3h: chosen.cap,
+      utilizacion: round2(caudal_m3h / chosen.cap),
+    };
+  });
+
+  // 4. Generar la lista de materiales (BOM) a partir de los resultados
+  const bom: BomItem[] = [];
+  const bomPipeMap = new Map<number, number>(); // dn -> longitud_m
+
+  tramoResults.forEach((res, index) => {
+    const tramoOriginal = tramosCalculados[index];
+    
+    // Cañerías
+    const currentLength = bomPipeMap.get(res.diametro_dn) || 0;
+    bomPipeMap.set(res.diametro_dn, currentLength + tramoOriginal.longitud_m);
+
+    // Accesorios del tramo (codos, tes)
+    if (tramoOriginal.accesorios.codos_90 > 0) {
+      bom.push({ kind: 'fitting', type: 'codo_90', dn: res.diametro_dn, qty: tramoOriginal.accesorios.codos_90 });
+    }
+    if (tramoOriginal.accesorios.codos_45 > 0) {
+      bom.push({ kind: 'fitting', type: 'codo_45', dn: res.diametro_dn, qty: tramoOriginal.accesorios.codos_45 });
+    }
+    if (tramoOriginal.accesorios.tes > 0) {
+        bom.push({ kind: 'fitting', type: 'te', dn: res.diametro_dn, qty: tramoOriginal.accesorios.tes });
+    }
+
+    // Reducciones (se detectan comparando con el tramo siguiente)
+    const nextTramoResult = tramoResults[index + 1];
+    if (nextTramoResult && nextTramoResult.diametro_dn < res.diametro_dn) {
+        // Asumimos que la reducción se coloca con el diámetro mayor
+        bom.push({ kind: 'fitting', type: 'reduccion', dn: res.diametro_dn, qty: 1 });
     }
   });
   
-  // Llaves de paso por artefacto
+  // Convertir el mapa de cañerías a la lista final del BOM
+  for (const [dn, length_m] of bomPipeMap.entries()) {
+    bom.unshift({ kind: 'pipe', dn, length_m: round2(length_m) });
+  }
+
+  // Llaves de paso por artefacto (una por cada boca)
   bom.push({
       kind: 'accessory',
       key: 'llave_paso_artefacto',
       label: 'Llave de paso por artefacto',
-      qty: input.artefactos.length,
+      qty: input.bocas.length,
       unit: 'u'
   });
 
   return {
-    segmentResults,
+    tramoResults,
     bom,
     total_m3h,
     total_kcalh,

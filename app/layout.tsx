@@ -6,7 +6,7 @@ import AppHeader from "@/components/ui/AppHeader";
 
 export const metadata: Metadata = {
   title: {
-    default: "Bob Gasista - Termofusión",
+    default: "Bob Gasista - Calculadora de Proyectos",
     template: "%s | Bob Gasista",
   },
   description: "Cómputo de materiales para instalaciones de gas por termofusión.",
@@ -18,14 +18,12 @@ export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
   viewportFit: "cover",
-  themeColor: "#2C3333", // El color primario de tu paleta
+  themeColor: "#2C3333",
 };
 
 // --- CORRECCIÓN AQUÍ ---
-// Se actualizó el enlace para que apunte a la nueva calculadora integral.
+// Se actualizan los enlaces para el nuevo flujo de trabajo centrado en proyectos.
 const TABS = [
-  { href: "/", label: "Inicio" },
-  { href: "/gas/calculo", label: "Cálculo Gas" },
   { href: "/proyecto", label: "Proyectos" },
   { href: "/ayuda", label: "Ayuda" },
 ];
