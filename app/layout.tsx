@@ -39,7 +39,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <main className="mx-auto max-w-5xl px-4 py-6 space-y-6">{children}</main>
 
         <footer className="mx-auto max-w-5xl px-4 py-8 text-xs text-foreground/60">
-          Hecho con ♥ · Funciona offline (PWA)
+          Funciona offline (PWA)
         </footer>
       </body>
     </html>

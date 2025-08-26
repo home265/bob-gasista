@@ -48,7 +48,7 @@ export default function ProyectosPage() {
   return (
     <section className="space-y-6">
       <div>
-        <h1 className="text-2xl font-semibold">Mis Proyectos de Gas</h1>
+        <h1 className="text-2xl font-semibold">Mis Instalaciones de Gas</h1>
         <p className="text-sm text-foreground/70">Crea un proyecto nuevo o continúa con uno existente.</p>
       </div>
 
