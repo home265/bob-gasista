@@ -1,0 +1,9 @@
+{
+  "equiv_diameters": {
+    "elbow_90": 30,
+    "elbow_45": 16,
+    "tee_through": 20,
+    "tee_branch": 60,
+    "valve": 100
+  }
+}

@@ -1,0 +1,22 @@
+{
+  "systems": [
+    {
+      "id": "ppr_gas",
+      "label": "Polipropileno fusión (gas)",
+      "diameters_mm": [
+        { "dn": 20, "inner_mm": 13.2 },
+        { "dn": 25, "inner_mm": 17.2 },
+        { "dn": 32, "inner_mm": 21.6 }
+      ]
+    },
+    {
+      "id": "acero_rosca",
+      "label": "Acero roscado",
+      "diameters_mm": [
+        { "dn": 20, "inner_mm": 19.5 },
+        { "dn": 25, "inner_mm": 25.8 },
+        { "dn": 32, "inner_mm": 32.7 }
+      ]
+    }
+  ]
+}

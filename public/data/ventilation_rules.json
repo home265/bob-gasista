@@ -1,0 +1,4 @@
+{
+  "kitchen": { "min_grille_low_cm2_per_m3h": 6, "min_grille_high_cm2_per_m3h": 6, "notes": "Ajustar a normativa local." },
+  "room_heater": { "min_grille_total_cm2_per_m3h": 5, "notes": "Orientativo; verificar código vigente." }
+}

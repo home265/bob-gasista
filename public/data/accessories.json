@@ -1,0 +1,12 @@
+{
+  "materials": {
+    "llave_paso_u":   { "label": "Llave de paso para gas", "unit": "u" },
+    "flex_cocina_m":  { "label": "Flexible cocina",        "unit": "m" },
+    "regulador_glp_u":{ "label": "Regulador GLP",          "unit": "u" }
+  },
+  "rules": [
+    { "id": "valvula_por_artefacto", "material_key": "llave_paso_u",  "per_appliance": 1 },
+    { "id": "flexible_cocina",       "material_key": "flex_cocina_m", "appliance_id": "cocina", "qty_per_appliance": 1, "default_length_m": 1.0 },
+    { "id": "regulador_glp",         "material_key": "regulador_glp_u","apply_when_gas": "lpg", "qty": 1 }
+  ]
+}

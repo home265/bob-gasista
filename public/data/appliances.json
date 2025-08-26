@@ -1,0 +1,9 @@
+{
+  "appliances": [
+    { "id": "cocina",         "label": "Cocina",                               "default_kcal_h": 10000, "can_multiplicity": true },
+    { "id": "calefon",        "label": "Calefón",                              "default_kcal_h": 20000 },
+    { "id": "termotanque",    "label": "Termotanque",                          "default_kcal_h": 12000 },
+    { "id": "caldera",        "label": "Caldera",                               "default_kcal_h": 30000 },
+    { "id": "calefactor_tb",  "label": "Calefactor (tiro balanceado)",         "default_kcal_h": 3000,  "can_multiplicity": true }
+  ]
+}

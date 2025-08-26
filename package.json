@@ -1,23 +1,28 @@
 {
-  "name": "nextjs",
+  "name": "gas-pwa",
   "version": "0.1.0",
   "private": true,
   "scripts": {
     "dev": "next dev --turbopack",
     "build": "next build --turbopack",
-    "start": "next start"
+    "start": "next start",
+    "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "next": "15.5.0",
     "react": "19.1.0",
     "react-dom": "19.1.0",
-    "next": "15.5.0"
+    "clsx": "^2.1.1",
+    "tailwind-merge": "^2.5.4"
   },
   "devDependencies": {
-    "typescript": "^5",
+    "typescript": "^5.6.2",
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",
+    "tailwindcss": "^4",
     "@tailwindcss/postcss": "^4",
-    "tailwindcss": "^4"
+    "postcss": "^8.4.47",
+    "autoprefixer": "^10.4.20"
   }
 }

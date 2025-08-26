@@ -1,0 +1,6 @@
+{
+  "types": [
+    { "id": "natural", "label": "Gas natural", "poder_calorifico_kcal_m3": 9300, "service_pressure_mbar": 20, "max_pressure_drop_mbar": 2.0 },
+    { "id": "lpg",     "label": "Gas envasado (GLP)", "poder_calorifico_kcal_m3": 22000, "service_pressure_mbar": 28, "max_pressure_drop_mbar": 2.0 }
+  ]
+}
