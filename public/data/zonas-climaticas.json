@@ -1,0 +1,27 @@
+[
+  {
+    "id": "muy_fria",
+    "label": "Zona muy fría (Ej: Sur de Santa Cruz)",
+    "coeficiente_k": 1.9
+  },
+  {
+    "id": "fria",
+    "label": "Zona fría (Ej: Bariloche, Mendoza)",
+    "coeficiente_k": 1.6
+  },
+  {
+    "id": "templada_fria",
+    "label": "Zona templada-fría (Ej: Buenos Aires, Córdoba)",
+    "coeficiente_k": 1.3
+  },
+  {
+    "id": "templada_calida",
+    "label": "Zona templada-cálida (Ej: Rosario, Santa Fe)",
+    "coeficiente_k": 1.1
+  },
+  {
+    "id": "calida",
+    "label": "Zona cálida (Ej: Formosa, Salta)",
+    "coeficiente_k": 0.9
+  }
+]

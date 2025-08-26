@@ -1,19 +1,13 @@
 // lib/gas/types.ts
+
+// --- TIPOS DE CATÁLOGO (Datos de referencia, sin cambios) ---
+
 export type GasKind = "natural" | "lpg";
 
 export type GasOption = {
   id: GasKind;
   label: string;
   poder_calorifico_kcal_m3: number;
-  service_pressure_mbar: number;
-  max_pressure_drop_mbar: number;
-};
-
-export type ApplianceCatalogItem = {
-  id: string;
-  label: string;
-  default_kcal_h: number;
-  can_multiplicity?: boolean;
 };
 
 export type PipeSystem = {
@@ -22,33 +16,65 @@ export type PipeSystem = {
   diameters_mm: Array<{ dn: number; inner_mm: number }>;
 };
 
+export type ApplianceCatalogItem = {
+  id: string;
+  label: string;
+  default_kcal_h: number;
+};
+
 export type FittingsEquivalents = {
-  // multiplicador en "n·D" (número de diámetros) por accesorio
   equiv_diameters: Record<"elbow_90" | "elbow_45" | "tee_through" | "tee_branch" | "valve", number>;
 };
 
 export type CapacityTable = {
   gas: GasKind;
   pressure_mbar: number;
-  // por DN, pares [longitud_m, capacidad_m3h] ordenados por longitud ascendente
   diameters_mm: Record<string, Array<[number, number]>>;
 };
 
-export type ApplianceInstance = {
-  id: string;            // ej. "A1"
-  catalogId: string;     // ej. "cocina"
-  kcal_h?: number;       // si no se da, se usa default del catálogo
-  count?: number;        // multiplicidad (>=1)
+
+// --- NUEVOS TIPOS PARA EL FORMULARIO (lo que el usuario ingresa) ---
+
+// Representa un artefacto en la lista del formulario.
+export type GasApplianceInput = {
+  id: string; // Un ID único para el estado de React (ej: crypto.randomUUID())
+  label: string; // Etiqueta puesta por el usuario (ej: "Cocina Ppal")
+  catalogId: string; // ID del catálogo (ej: "cocina")
+  consumo_kcal_h: number;
 };
 
-export type SegmentFittings = Partial<Record<keyof FittingsEquivalents["equiv_diameters"], number>>;
+// Representa un tramo en la lista del formulario. Es más simple que el anterior.
+export type GasSegmentInput = {
+  id: string; // ID único para el estado de React
+  label: string; // Etiqueta del tramo (ej: "Medidor a Cocina")
+  longitud_m: number;
+  accesorios: {
+    codos_90: number;
+    codos_45: number;
+    llaves_paso: number;
+  };
+  // El usuario define qué artefactos se conectan al final de este tramo.
+  artefactos_servidos: string[]; // Array de IDs de GasApplianceInput
+};
 
-export type SegmentInput = {
-  id: string;                            // ej. "C-E"
-  real_length_m: number;                 // longitud real
-  fittings?: SegmentFittings;            // codos/tees/llaves en el tramo
-  // Artefactos que "cuelgan" aguas abajo de este tramo,
-  // con su distancia total desde el medidor para criterio “distancia mayor”
+// Este es el objeto completo que representa todos los datos del formulario.
+export type InstallationInput = {
+  gasId: GasKind;
+  pipeSystemId: string;
+  artefactos: GasApplianceInput[];
+  tramos: GasSegmentInput[];
+};
+
+
+// --- TIPOS PARA EL MOTOR DE CÁLCULO (lo que la lógica interna usa) ---
+
+// (Estos tipos se mantienen porque la lógica de cálculo es robusta,
+// solo que ahora se construyen a partir del `InstallationInput`)
+
+export type SegmentInternal = {
+  id: string;
+  real_length_m: number;
+  fittings?: Partial<Record<keyof FittingsEquivalents["equiv_diameters"], number>>;
   downstream: Array<{ applianceId: string; distance_from_meter_m: number }>;
 };
 
@@ -58,26 +84,32 @@ export type JobInput = {
   capacity: CapacityTable;
   fittingsEq: FittingsEquivalents;
   appliancesCatalog: ApplianceCatalogItem[];
-  appliances: ApplianceInstance[];
-  segments: SegmentInput[];
+  appliances: Array<{ id: string; catalogId: string; kcal_h: number }>;
+  segments: SegmentInternal[];
 };
 
 export type SegmentResult = {
   id: string;
+  label: string; // Añadimos el label para mostrarlo en resultados
   served_m3h: number;
   worst_distance_m: number;
   selected_dn: number;
-  effective_length_m: number; // con equivalentes para ese DN
+  effective_length_m: number;
   capacity_m3h: number;
-  utilization: number;        // served/capacity
+  utilization: number;
   warning?: string;
 };
 
 export type BomItem =
   | { kind: "pipe"; dn: number; length_m: number }
-  | { kind: "fitting"; type: keyof FittingsEquivalents["equiv_diameters"]; dn: number; qty: number };
+  | { kind: "fitting"; type: keyof FittingsEquivalents["equiv_diameters"]; dn: number; qty: number }
+  | { kind: "accessory"; key: string; label: string; qty: number; unit: "u" | "m" };
 
+
+// --- TIPO DE RESULTADO FINAL (lo que la función de cálculo devuelve) ---
 export type ComputeResult = {
-  segments: SegmentResult[];
+  segmentResults: SegmentResult[];
   bom: BomItem[];
+  total_m3h: number;
+  total_kcalh: number;
 };

@@ -9,12 +9,11 @@ export type MaterialRow = {
   unit: Unit;
 };
 
+// --- MODIFICACIÓN AQUÍ ---
+// Simplificamos los tipos de partida. Eliminamos las opciones viejas.
 export type PartidaKind =
-  | "gas_instalacion"   // resumen general
-  | "gas_artefacto"     // cocina / calefón / termotanque / caldera / calefactor
-  | "gas_tramo"         // tramo A→C, C→E, etc.
-  | "gas_ventilacion"   // rejillas, aireación
-  | "custom";
+  | "gas_instalacion"   // Para la nueva calculadora integral
+  | "custom";           // Para partidas manuales
 
 export type Partida = {
   id: string;
