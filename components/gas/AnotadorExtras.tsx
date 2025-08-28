@@ -1,3 +1,4 @@
+// components/gas/AnotadorExtras.tsx
 "use client";
 
 import { useState } from "react";
@@ -45,7 +46,11 @@ export default function AnotadorExtras() {
               <span>{item.nombre}</span>
               <div className="flex items-center gap-3">
                  <span>Cantidad: <strong>{item.cantidad}</strong></span>
-                 <button onClick={() => handleRemoveItem(item.id)} className="text-red-500 hover:text-red-400 text-xs">
+                 {/* --- ESTILO DE BOTÓN "QUITAR" ACTUALIZADO --- */}
+                 <button 
+                    onClick={() => handleRemoveItem(item.id)} 
+                    className="btn btn-ghost text-red-500 hover:bg-red-900/40 text-xs py-1 px-2"
+                 >
                     Quitar
                  </button>
               </div>
@@ -76,7 +81,8 @@ export default function AnotadorExtras() {
             className="w-24 px-3 py-2 mt-1 text-center"
           />
         </label>
-        <button type="button" onClick={handleAddItem} className="btn-secondary">
+        {/* --- ESTILO DE BOTÓN "+ AGREGAR" ACTUALIZADO --- */}
+        <button type="button" onClick={handleAddItem} className="btn btn-secondary">
           + Agregar
         </button>
       </div>

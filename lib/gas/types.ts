@@ -36,11 +36,17 @@ export type CapacityTable = {
 
 // --- NUEVOS TIPOS PARA EL FORMULARIO (lo que el usuario ingresa) ---
 
+// Tipo para la nueva propiedad 'direction', para el futuro boceto del plano.
+export type Direction = "adelante" | "derecha" | "izquierda" | "arriba" | "abajo";
+
 // Representa una "boca" o punto de consumo en la instalación.
 export type BocaInput = {
   id: string; // ID único para el estado de React
   planta: string; // Etiqueta de la planta donde se ubica (ej: "Planta Baja")
   distancia_desde_anterior_m: number;
+  // --- ÚNICO CAMBIO AQUÍ ---
+  // Añadimos el campo 'direction' para el boceto. Es opcional para no romper el código existente de momento.
+  direction?: Direction;
   artefacto: {
     catalogId: string; // ID del catálogo (ej: "cocina")
     consumo_kcal_h: number;

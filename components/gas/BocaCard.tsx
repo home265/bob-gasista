@@ -7,45 +7,52 @@ import React from "react";
 type Props = {
   index: number;
   onRemove: () => void;
+  // --- AÑADIMOS UNA NUEVA PROP PARA EL BOTÓN ---
+  onAdd: () => void;
   onOpenBalanceTermico: (index: number) => void;
   catalogs: GasCatalogs;
 };
 
-export default function BocaCard({ index, onRemove, onOpenBalanceTermico, catalogs }: Props) {
+export default function BocaCard({ index, onRemove, onAdd, onOpenBalanceTermico, catalogs }: Props) {
   const { register, control, setValue } = useFormContext();
 
   const plantas = useWatch({ control, name: "plantas" });
   const artefactoCatalogId = useWatch({ control, name: `bocas.${index}.artefacto.catalogId` });
   
-  // Lógica mejorada: es más robusto chequear por el ID que por el texto.
   const esCalefactor = artefactoCatalogId?.startsWith("calefactor");
 
-  // Función que se ejecuta cuando el usuario cambia el tipo de artefacto
   const handleApplianceChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
     const newApplianceId = e.target.value;
     
-    // 1. Actualizamos el ID del artefacto en el formulario
     setValue(`bocas.${index}.artefacto.catalogId`, newApplianceId);
     
-    // 2. Buscamos el artefacto en el catálogo para obtener su consumo por defecto
     const selectedAppliance = catalogs.appliances.find(a => a.id === newApplianceId);
     
-    // 3. Actualizamos las kcal/h con el valor por defecto del nuevo artefacto
     if (selectedAppliance) {
       setValue(`bocas.${index}.artefacto.consumo_kcal_h`, selectedAppliance.default_kcal_h);
+    }
+
+    if (newApplianceId.startsWith("calefactor")) {
+      onOpenBalanceTermico(index);
     }
   };
 
   return (
     <div className="card p-4 space-y-4 relative bg-muted/30">
-      <div className="flex justify-between items-start">
-        <h3 className="font-bold text-lg text-foreground/80">Boca #{index + 1}</h3>
-        <button type="button" onClick={onRemove} className="btn-danger text-xs px-2 py-1">
-          Eliminar
-        </button>
+      <div className="flex justify-between items-start gap-2">
+        <h3 className="font-bold text-lg text-foreground/80 pt-1">Boca #{index + 1}</h3>
+        {/* --- NUEVO GRUPO DE BOTONES --- */}
+        <div className="flex gap-2">
+            <button type="button" onClick={onRemove} className="btn btn-danger">
+              Eliminar
+            </button>
+            <button type="button" onClick={onAdd} className="btn btn-secondary">
+             + Añadir Siguiente
+            </button>
+        </div>
       </div>
 
-      <div className="grid sm:grid-cols-2 gap-4">
+      <div className="grid sm:grid-cols-3 gap-4">
         <label className="text-sm flex flex-col gap-1">
           <span className="font-medium">Ubicación (Planta)</span>
           <select {...register(`bocas.${index}.planta`)} className="w-full px-3 py-2">
@@ -54,7 +61,7 @@ export default function BocaCard({ index, onRemove, onOpenBalanceTermico, catalo
         </label>
         <label className="text-sm flex flex-col gap-1">
           <span className="font-medium">
-            {index === 0 ? "Distancia desde Nicho (m)" : `Distancia desde Boca #${index} (m)`}
+            {index === 0 ? "Dist. Nicho (m)" : `Dist. Boca #${index} (m)`}
           </span>
           <input
             type="number"
@@ -62,6 +69,16 @@ export default function BocaCard({ index, onRemove, onOpenBalanceTermico, catalo
             {...register(`bocas.${index}.distancia_desde_anterior_m`, { valueAsNumber: true })}
             className="w-full px-3 py-2"
           />
+        </label>
+        <label className="text-sm flex flex-col gap-1">
+            <span className="font-medium">Dirección del Tramo</span>
+            <select {...register(`bocas.${index}.direction`)} className="w-full px-3 py-2">
+                <option value="adelante">Adelante</option>
+                <option value="derecha">Derecha</option>
+                <option value="izquierda">Izquierda</option>
+                <option value="arriba">Arriba</option>
+                <option value="abajo">Abajo</option>
+            </select>
         </label>
       </div>
       
@@ -72,8 +89,8 @@ export default function BocaCard({ index, onRemove, onOpenBalanceTermico, catalo
                 <span className="font-medium">Tipo de Artefacto</span>
                 <select 
                   className="w-full px-3 py-2"
-                  value={artefactoCatalogId} // Controlamos el valor para que React sepa cuándo cambiar
-                  onChange={handleApplianceChange} // Usamos nuestra nueva función al cambiar
+                  value={artefactoCatalogId}
+                  onChange={handleApplianceChange}
                 >
                   {catalogs.appliances.map(a => <option key={a.id} value={a.id}>{a.label}</option>)}
                 </select>
@@ -84,7 +101,9 @@ export default function BocaCard({ index, onRemove, onOpenBalanceTermico, catalo
                     <input type="number" {...register(`bocas.${index}.artefacto.consumo_kcal_h`, { valueAsNumber: true })} className="w-full px-3 py-2"/>
                 </label>
                 {esCalefactor && (
-                    <button type="button" onClick={() => onOpenBalanceTermico(index)} className="btn-secondary flex-shrink-0" title="Ayudante de Balance Térmico">?</button>
+                    <button type="button" onClick={() => onOpenBalanceTermico(index)} className="btn btn-secondary flex-shrink-0" title="Ayudante de Balance Térmico">
+                      Calcular
+                    </button>
                 )}
             </div>
          </div>

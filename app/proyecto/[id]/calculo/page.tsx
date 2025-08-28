@@ -1,23 +1,26 @@
+// app/proyecto/[id]/calculo/page.tsx
 "use client";
 
 import { useState, useEffect, useMemo, Suspense } from "react";
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import { useForm, useFieldArray, FormProvider } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 
-import ResultTable, { ResultRow } from "@/components/ui/ResultTable";
+import ResultTable, { type ResultRow } from "@/components/ui/ResultTable";
 import BalanceTermicoModal from "@/components/gas/BalanceTermicoModal";
 import BocaCard from "@/components/gas/BocaCard";
 import AnotadorExtras from "@/components/gas/AnotadorExtras";
+// --- NUEVA IMPORTACIÓN PARA EL BOCETO ---
+import GasSketch from "@/components/gas/GasSketch";
 
-import { GasCatalogs, loadGasCatalogs } from "@/lib/data/catalogs";
+import { type GasCatalogs, loadGasCatalogs } from "@/lib/data/catalogs";
 import { getProject, getGasCalculation, saveOrUpdateGasCalculation } from "@/lib/project/storage";
-import { MaterialRow } from "@/lib/project/types";
-import { ComputeResult, CalculoInput as CalculoInputType } from "@/lib/gas/types";
+import { type Project, type MaterialRow } from "@/lib/project/types";
+import { type ComputeResult, type CalculoInput as CalculoInputType } from "@/lib/gas/types";
 import { computeGasInstallation } from "@/lib/gas/compute";
 
-// Esquemas de validación (sin cambios)
+// Esquemas de validación de Zod
 const plantaSchema = z.object({
   id: z.string(),
   nombre: z.string().min(1, "El nombre es requerido"),
@@ -27,6 +30,7 @@ const bocaSchema = z.object({
   id: z.string(),
   planta: z.string().min(1, "Requerido"),
   distancia_desde_anterior_m: z.number().min(0.1, "Debe ser > 0"),
+  direction: z.enum(["adelante", "derecha", "izquierda", "arriba", "abajo"]).optional(),
   artefacto: z.object({
     catalogId: z.string().min(1, "Seleccione un artefacto"),
     consumo_kcal_h: z.number().min(1, "Debe ser > 0"),
@@ -42,21 +46,22 @@ const formSchema = z.object({
   gasId: z.enum(["natural", "lpg"]),
   pipeSystemId: z.string().min(1, "Seleccione un sistema"),
   plantas: z.array(plantaSchema).min(1, "Debe definir al menos una planta"),
-  bocas: z.array(bocaSchema).min(0), // Puede empezar vacío
+  bocas: z.array(bocaSchema).min(0),
 });
 
 type FormInput = z.infer<typeof formSchema>;
 
 function CalculadoraProyecto() {
   const { id: projectId } = useParams<{ id: string }>();
-  const project = useMemo(() => getProject(projectId), [projectId]);
-  
+  const router = useRouter();
+
+  const [project, setProject] = useState<Project | null>(null);
   const [catalogs, setCatalogs] = useState<GasCatalogs | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
   const [result, setResult] = useState<ComputeResult | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [activeBocaIndex, setActiveBocaIndex] = useState<number | null>(null);
-  const [isLoaded, setIsLoaded] = useState(false); // Flag para saber si ya cargamos datos
-
+  
   const methods = useForm<FormInput>({
     resolver: zodResolver(formSchema),
     defaultValues: {
@@ -69,26 +74,31 @@ function CalculadoraProyecto() {
 
   const { control, handleSubmit, setValue, watch, register, getValues, reset } = methods;
 
-  // --- LÓGICA DE CARGA DE DATOS ---
+  // --- LÓGICA DE CARGA DE DATOS (SIN CAMBIOS) ---
   useEffect(() => {
-    if (projectId && !isLoaded) {
-      const savedCalculation = getGasCalculation(projectId);
+    if (!projectId) return;
+    const loadInitialData = async () => {
+      setIsLoading(true);
+      const [fetchedProject, fetchedCatalogs, savedCalculation] = await Promise.all([
+        getProject(projectId),
+        loadGasCatalogs(),
+        getGasCalculation(projectId)
+      ]);
+      if (!fetchedProject) {
+        router.replace("/proyecto");
+        return;
+      }
+      setProject(fetchedProject);
+      setCatalogs(fetchedCatalogs);
       if (savedCalculation?.inputs) {
         reset(savedCalculation.inputs as FormInput);
+      } else if (fetchedCatalogs.pipeSystems.length > 0) {
+        setValue("pipeSystemId", fetchedCatalogs.pipeSystems[0].id);
       }
-      setIsLoaded(true); // Marcamos como cargado para que no se repita
-    }
-  }, [projectId, isLoaded, reset]);
-  
-  // --- LÓGICA PARA CARGAR CATÁLOGOS ---
-  useEffect(() => {
-    loadGasCatalogs().then(data => {
-      setCatalogs(data);
-      if (!getValues("pipeSystemId") && data.pipeSystems.length > 0) {
-        setValue("pipeSystemId", data.pipeSystems[0].id);
-      }
-    });
-  }, [setValue, getValues]);
+      setIsLoading(false);
+    };
+    loadInitialData();
+  }, [projectId, reset, router, setValue]);
 
   const { fields: bocaFields, append: appendBoca, remove: removeBoca } = useFieldArray({
     control, name: "bocas",
@@ -98,6 +108,7 @@ function CalculadoraProyecto() {
   });
 
   const plantas = watch("plantas");
+  const bocas = watch("bocas"); // Necesitamos observar las bocas para pasárselas al boceto
   
   const handleAddBoca = () => {
     const lastBoca = bocaFields[bocaFields.length - 1];
@@ -106,6 +117,7 @@ function CalculadoraProyecto() {
       id: crypto.randomUUID(),
       planta: lastBoca?.planta || ultimaPlanta?.nombre || "Planta Baja",
       distancia_desde_anterior_m: 3,
+      direction: "adelante",
       artefacto: {
         catalogId: catalogs?.appliances[0]?.id || "",
         consumo_kcal_h: catalogs?.appliances[0]?.default_kcal_h || 10000,
@@ -134,10 +146,9 @@ function CalculadoraProyecto() {
     }
   };
   
-  // --- FUNCIÓN DE GUARDADO ---
-  const handleSaveCalculation = () => {
+  const handleSaveCalculation = async () => {
     if (!result || !project) return;
-    saveOrUpdateGasCalculation(project.id, {
+    await saveOrUpdateGasCalculation(project.id, {
       title: `Cálculo de Gas - ${project.name}`,
       inputs: getValues(),
       outputs: result,
@@ -147,7 +158,6 @@ function CalculadoraProyecto() {
   };
 
   const { tramoRows, bomRows, itemsForProject } = useMemo(() => {
-    // ... (lógica de memoización sin cambios)
     if (!result) return { tramoRows: [], bomRows: [], itemsForProject: [] };
     const tramoRows: ResultRow[] = result.tramoResults.map(t => ({
       label: t.label, qty: `Ø${t.diametro_dn}mm`, unit: `${t.caudal_m3h} m³/h`, hint: `L. eq: ${t.longitud_equivalente_m}m`,
@@ -169,7 +179,9 @@ function CalculadoraProyecto() {
     return { tramoRows, bomRows, itemsForProject };
   }, [result]);
 
-  if (!project || !catalogs || !isLoaded) return <div className="p-6">Cargando calculadora...</div>;
+  if (isLoading || !project || !catalogs) {
+    return <div className="p-6 text-center">Cargando calculadora...</div>;
+  }
 
   return (
     <FormProvider {...methods}>
@@ -180,7 +192,6 @@ function CalculadoraProyecto() {
         </div>
         
         <form onSubmit={handleSubmit(onSubmit)} className="space-y-8">
-           {/* ... (Formulario sin cambios) ... */}
            <div className="card p-4 space-y-4">
             <h2 className="font-medium text-lg border-b border-border pb-2">1. Datos Generales</h2>
             <div className="grid sm:grid-cols-2 gap-4">
@@ -206,34 +217,39 @@ function CalculadoraProyecto() {
                       placeholder={`Nombre (Ej: Piso ${index + 1})`}
                       className="w-full px-3 py-2 text-sm"
                    />
-                   <button type="button" onClick={() => removePlanta(index)} className="btn-danger flex-shrink-0" disabled={plantaFields.length <= 1}>
+                   {/* --- ESTÉTICA DE BOTONES MEJORADA --- */}
+                   <button type="button" onClick={() => removePlanta(index)} className="btn btn-danger" disabled={plantaFields.length <= 1}>
                       Quitar
                    </button>
                 </div>
               ))}
-              <button type="button" onClick={() => appendPlanta({id: crypto.randomUUID(), nombre: `Piso ${plantaFields.length}`})} className="btn-secondary text-sm">
+              <button type="button" onClick={() => appendPlanta({id: crypto.randomUUID(), nombre: `Piso ${plantaFields.length}`})} className="btn btn-secondary">
                 + Agregar Planta
               </button>
             </div>
           </div>
           <div className="space-y-4">
-            <div className="flex items-center justify-between">
-                <h2 className="font-medium text-lg">2. Bocas y Recorrido de la Instalación</h2>
-                <button type="button" onClick={handleAddBoca} className="btn-secondary">+ Agregar Boca</button>
-            </div>
+            <h2 className="font-medium text-lg">2. Bocas y Recorrido de la Instalación</h2>
+            {/* --- MEJORA DE UX: BOTÓN "+ Agregar Boca" ELIMINADO DE AQUÍ --- */}
             <div className="space-y-3">
               {bocaFields.map((field, index) => (
                 <BocaCard 
                   key={field.id}
                   index={index}
                   onRemove={() => removeBoca(index)}
+                  // --- MEJORA DE UX: PASAMOS LA FUNCIÓN PARA AÑADIR LA SIGUIENTE BOCA ---
+                  onAdd={handleAddBoca}
                   onOpenBalanceTermico={handleOpenBalanceTermico}
                   catalogs={catalogs}
                 />
               ))}
               {bocaFields.length === 0 && (
                 <div className="text-center py-8 text-foreground/60 card">
-                  Aún no hay bocas. ¡Agrega la primera para empezar!
+                  <p>Aún no hay bocas. ¡Agrega la primera para empezar!</p>
+                   {/* --- MEJORA DE UX: BOTÓN INICIAL PARA AÑADIR BOCA --- */}
+                  <button type="button" onClick={handleAddBoca} className="btn btn-primary mt-4">
+                    + Agregar Primera Boca
+                  </button>
                 </div>
               )}
             </div>
@@ -253,13 +269,20 @@ function CalculadoraProyecto() {
           <div id="resultados" className="space-y-8 pt-6 border-t-2 border-border border-dashed">
             <div className="flex justify-between items-center">
               <h2 className="text-xl font-semibold">Resultados del Cálculo</h2>
-              <button onClick={handleSaveCalculation} className="btn">
+              <button onClick={handleSaveCalculation} className="btn btn-primary">
                 Guardar Cálculo en el Proyecto
               </button>
             </div>
-            <div className="grid md:grid-cols-2 gap-8">
+            {/* --- INTEGRACIÓN DEL BOCETO --- */}
+            <div className="grid md:grid-cols-2 gap-8 items-start">
+                <div>
+                    <h3 className="font-medium mb-2">Boceto de la Instalación</h3>
+                    <GasSketch bocas={bocas} />
+                </div>
                 <ResultTable title="Diámetros por Tramo" items={tramoRows} />
-                <ResultTable title="Cómputo de Materiales" items={bomRows} />
+                <div className="md:col-span-2">
+                  <ResultTable title="Cómputo de Materiales" items={bomRows} />
+                </div>
             </div>
           </div>
         )}
@@ -276,5 +299,5 @@ function CalculadoraProyecto() {
 }
 
 export default function CalculoPage() {
-    return <Suspense fallback={<div>Cargando...</div>}><CalculadoraProyecto /></Suspense>;
+    return <Suspense fallback={<div className="p-6 text-center">Preparando calculadora...</div>}><CalculadoraProyecto /></Suspense>;
 }

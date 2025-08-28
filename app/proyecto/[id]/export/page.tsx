@@ -1,39 +1,76 @@
 "use client";
 
 import { useParams } from "next/navigation";
+import { useEffect, useState, useMemo } from "react";
 import { getProject } from "@/lib/project/storage";
 import { aggregateMaterials } from "@/lib/project/compute";
 import type { Project } from "@/lib/project/types";
+import type { BocaInput } from "@/lib/gas/types"; // Importamos el tipo BocaInput
+import GasSketch from "@/components/gas/GasSketch"; // Importamos el componente del boceto
 
 export default function ProyectoExportPage() {
   const { id } = useParams<{ id: string }>();
-  const pMaybe = getProject(id);
-  if (!pMaybe) return <div className="p-6">Proyecto no encontrado.</div>;
+  const [project, setProject] = useState<Project | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
 
-  const p: Project = pMaybe;
-  const mat = aggregateMaterials(p);
+  useEffect(() => {
+    if (id) {
+      setIsLoading(true);
+      getProject(id).then(p => {
+        if (p) {
+          setProject(p);
+        }
+        setIsLoading(false);
+      });
+    }
+  }, [id]);
+
+  // --- MODIFICACIÓN AQUÍ: AHORA TAMBIÉN EXTRAEMOS LAS BOCAS ---
+  const { mat, bocas } = useMemo(() => {
+    if (!project) return { mat: [], bocas: [] };
+    const materials = aggregateMaterials(project);
+    const gasPartida = project.partes.find(p => p.kind === 'gas_instalacion');
+    const projectBocas = (gasPartida?.inputs as { bocas?: BocaInput[] })?.bocas || [];
+    return { mat: materials, bocas: projectBocas };
+  }, [project]);
+
+  if (isLoading) {
+    return <div className="p-6">Cargando datos para exportar...</div>;
+  }
+
+  if (!project) {
+    return <div className="p-6">Proyecto no encontrado.</div>;
+  }
 
   return (
     <section className="space-y-4 print:space-y-2">
       <div className="flex items-center justify-between print:hidden">
         <h1 className="text-2xl font-semibold">Imprimir / PDF</h1>
-        <button className="btn" onClick={() => window.print()}>Imprimir</button>
+        <button className="btn btn-primary" onClick={() => window.print()}>Imprimir</button>
       </div>
 
       <div className="border rounded p-4">
-        <h2 className="font-medium text-lg">{p.name}</h2>
+        <h2 className="font-medium text-lg">{project.name}</h2>
         <div className="text-sm text-foreground/70">
-          Cliente: {p.client || "-"} · Obra: {p.siteAddress || "-"}
+          Cliente: {project.client || "-"} · Obra: {project.siteAddress || "-"}
         </div>
       </div>
+      
+      {/* --- NUEVO BLOQUE: SE AÑADE EL BOCETO A LA VISTA PREVIA --- */}
+      {bocas.length > 0 && (
+          <div className="border rounded p-4">
+              <h3 className="font-medium mb-2">Boceto de la Instalación</h3>
+              <GasSketch bocas={bocas} />
+          </div>
+      )}
 
       <div className="border rounded p-4">
         <h3 className="font-medium mb-2">Partidas</h3>
-        {p.partes.length === 0 ? (
+        {project.partes.length === 0 ? (
           <p className="text-sm text-foreground/60">Sin partidas.</p>
         ) : (
           <ul className="text-sm space-y-1">
-            {p.partes.map((pt) => (
+            {project.partes.map((pt) => (
               <li key={pt.id}>
                 • {pt.title} <span className="text-foreground/60">({pt.kind})</span>
               </li>
@@ -72,7 +109,7 @@ export default function ProyectoExportPage() {
         @media print {
           header, footer, nav, .print\\:hidden { display: none !important; }
           .print\\:space-y-2 > * + * { margin-top: .5rem; }
-          body { background: #fff; }
+          body { background: #fff; color: #000; }
         }
       `}</style>
     </section>

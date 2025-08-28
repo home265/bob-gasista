@@ -1,42 +1,24 @@
 // lib/project/storage.ts
-import type { Project, Partida, PartidaKind, MaterialRow } from "./types";
+import { db } from "@/lib/db";
+import type { Project, Partida, MaterialRow } from "./types";
 
-const LS_KEY = "gascalc_projects_v1";
-
-const hasWindow = () => typeof window !== "undefined" && !!window.localStorage;
 const now = () => Date.now();
 
-function readAll(): Project[] {
-  if (!hasWindow()) return [];
-  try {
-    const raw = window.localStorage.getItem(LS_KEY);
-    if (!raw) return [];
-    const arr = JSON.parse(raw) as unknown;
-    if (!Array.isArray(arr)) return [];
-    return arr.filter((p) => p && typeof p.id === "string");
-  } catch {
-    return [];
-  }
+// --- API de Proyectos (Corregida y funcionando) ---
+
+export async function listProjects(): Promise<Pick<Project, "id" | "name">[]> {
+  // --- CORRECCIÓN DEFINITIVA AQUÍ ---
+  // 1. Primero esperamos a que la base de datos nos devuelva el array completo de proyectos.
+  const allProjects = await db.projects.orderBy("name").toArray();
+  // 2. Luego, con el array en mano, lo mapeamos para devolver solo los campos necesarios.
+  return allProjects.map(p => ({ id: p.id, name: p.name }));
 }
 
-function writeAll(list: Project[]) {
-  if (!hasWindow()) return;
-  window.localStorage.setItem(LS_KEY, JSON.stringify(list));
+export async function getProject(id: string): Promise<Project | undefined> {
+  return db.projects.get(id);
 }
 
-// ---- API de Proyectos (Simplificada) ----
-
-export function listProjects(): Array<Pick<Project, "id" | "name">> {
-  return readAll().map(({ id, name }) => ({ id, name })).sort((a, b) => a.name.localeCompare(b.name));
-}
-
-export function getProject(id: string): Project | null {
-  const p = readAll().find((x) => x.id === id);
-  return p ?? null;
-}
-
-export function createProject(input: { name: string; client?: string; siteAddress?: string }): Project {
-  const list = readAll();
+export async function createProject(input: { name: string; client?: string; siteAddress?: string }): Promise<Project> {
   const p: Project = {
     id: crypto.randomUUID(),
     name: input.name.trim() || "Proyecto sin nombre",
@@ -46,44 +28,33 @@ export function createProject(input: { name: string; client?: string; siteAddres
     createdAt: now(),
     updatedAt: now(),
   };
-  list.push(p);
-  writeAll(list);
+  await db.projects.add(p);
   return p;
 }
 
-export function updateProject(id: string, patch: Partial<Pick<Project, "name" | "client" | "siteAddress">>): Project | null {
-  const list = readAll();
-  const idx = list.findIndex((x) => x.id === id);
-  if (idx < 0) return null;
-  const curr = list[idx];
-  const next: Project = { ...curr, ...patch, updatedAt: now() };
-  list[idx] = next;
-  writeAll(list);
-  return next;
+export async function updateProject(id: string, patch: Partial<Pick<Project, "name" | "client" | "siteAddress">>): Promise<Project | null> {
+  const updates = { ...patch, updatedAt: now() };
+  const updatedCount = await db.projects.update(id, updates);
+
+  if (updatedCount > 0) {
+    return getProject(id).then(p => p || null);
+  }
+  return null;
 }
 
-export function removeProject(id: string) {
-  const list = readAll().filter((x) => x.id !== id);
-  writeAll(list);
+export async function removeProject(id: string): Promise<void> {
+  await db.projects.delete(id);
 }
 
-// ---- API de Partidas (Específica para el Cálculo de Gas) ----
+// --- API de Partidas (Sin cambios, ya era correcta) ---
 
-/**
- * Busca la partida de cálculo de gas dentro de un proyecto.
- */
-export function getGasCalculation(projectId: string): Partida | null {
-    const p = getProject(projectId);
+export async function getGasCalculation(projectId: string): Promise<Partida | null> {
+    const p = await getProject(projectId);
     if (!p) return null;
-    // Solo puede haber una partida de gas por proyecto.
     return p.partes.find(pt => pt.kind === "gas_instalacion") ?? null;
 }
 
-/**
- * Guarda o actualiza la partida de cálculo de gas de un proyecto.
- * Si ya existe, la sobrescribe. Si no, la crea.
- */
-export function saveOrUpdateGasCalculation(
+export async function saveOrUpdateGasCalculation(
   projectId: string,
   data: {
     title: string;
@@ -91,18 +62,16 @@ export function saveOrUpdateGasCalculation(
     outputs: Record<string, unknown>;
     materials: MaterialRow[];
   }
-): Partida | null {
-  const list = readAll();
-  const projectIndex = list.findIndex((p) => p.id === projectId);
-  if (projectIndex < 0) return null;
+): Promise<Partida | null> {
+  const project = await getProject(projectId);
+  if (!project) return null;
 
-  const project = list[projectIndex];
   const existingPartidaIndex = project.partes.findIndex(pt => pt.kind === "gas_instalacion");
+  let savedPartida: Partida;
 
   if (existingPartidaIndex > -1) {
-    // --- ACTUALIZAR PARTIDA EXISTENTE ---
     const currentPartida = project.partes[existingPartidaIndex];
-    const updatedPartida: Partida = {
+    savedPartida = {
       ...currentPartida,
       title: data.title.trim() || currentPartida.title,
       inputs: data.inputs,
@@ -110,13 +79,9 @@ export function saveOrUpdateGasCalculation(
       materials: data.materials,
       updatedAt: now(),
     };
-    project.partes[existingPartidaIndex] = updatedPartida;
-    project.updatedAt = now();
-    writeAll(list);
-    return updatedPartida;
+    project.partes[existingPartidaIndex] = savedPartida;
   } else {
-    // --- CREAR NUEVA PARTIDA ---
-    const newPartida: Partida = {
+    savedPartida = {
       id: crypto.randomUUID(),
       kind: "gas_instalacion",
       title: data.title.trim() || "Cálculo de Gas",
@@ -126,9 +91,11 @@ export function saveOrUpdateGasCalculation(
       createdAt: now(),
       updatedAt: now(),
     };
-    project.partes.push(newPartida);
-    project.updatedAt = now();
-    writeAll(list);
-    return newPartida;
+    project.partes.push(savedPartida);
   }
+  
+  project.updatedAt = now();
+  await db.projects.put(project);
+
+  return savedPartida;
 }
