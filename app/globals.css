@@ -53,7 +53,11 @@ body{
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
-
+.header {
+  background: var(--card);
+  border-bottom: 1px solid var(--border);
+  backdrop-filter: blur(6px);
+}
 /* Selección de texto */
 ::selection{
   background: color-mix(in srgb, var(--color-accent) 35%, transparent);
