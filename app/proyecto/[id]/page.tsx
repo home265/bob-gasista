@@ -11,9 +11,8 @@ import { Canvg } from 'canvg';
 import { getProject } from "@/lib/project/storage";
 import { aggregateMaterials } from "@/lib/project/compute";
 import { generateSvgString } from "@/lib/gas/drawing";
-// --- CORRECCIÓN DE IMPORTACIÓN AQUÍ ---
 import type { Project } from "@/lib/project/types";
-import type { BocaInput } from "@/lib/gas/types"; // Se importa desde la ruta correcta.
+import type { BocaInput } from "@/lib/gas/types";
 
 export default function ProyectoDetallePage() {
   const { id } = useParams<{ id: string }>();
@@ -49,7 +48,9 @@ export default function ProyectoDetallePage() {
     return { mat: materials, safeName: sanitizedName, bocas: projectBocas };
   }, [project]);
 
-  async function handleSharePdf() {
+  // --- FUNCIÓN ACTUALIZADA ---
+  // Ahora se llama handleDownloadPdf y solo descarga el archivo.
+  async function handleDownloadPdf() {
     if (!project) return;
 
     const doc = new jsPDF();
@@ -75,8 +76,6 @@ export default function ProyectoDetallePage() {
       canvas.height = height;
       const ctx = canvas.getContext('2d');
       
-      // --- CORRECCIÓN DE 'canvg' AQUÍ ---
-      // Ya no pasamos la opción 'styles' porque están dentro del SVG.
       const v = await Canvg.from(ctx!, svg);
       await v.render();
       
@@ -95,28 +94,10 @@ export default function ProyectoDetallePage() {
       headStyles: { fillColor: [46, 79, 79] },
     });
 
-    const pdfBlob = doc.output('blob');
-    const pdfFile = new File([pdfBlob], `proyecto_${safeName}.pdf`, { type: 'application/pdf' });
-
-    type NavigatorWithShare = Navigator & {
-        canShare?: (data?: { files: File[] }) => boolean;
-        share?: (data?: { files?: File[]; title?: string; text?: string; }) => Promise<void>;
-    };
-    const nav = navigator as NavigatorWithShare;
-
-    if (nav.canShare && nav.canShare({ files: [pdfFile] })) {
-      try {
-        await nav.share({
-          title: `Proyecto - ${project.name}`,
-          text: `Resumen de materiales para el proyecto "${project.name}"`,
-          files: [pdfFile],
-        });
-      } catch (error) {
-        console.error("El usuario canceló la acción de compartir.", error);
-      }
-    } else {
-      doc.save(`proyecto_${safeName}.pdf`);
-    }
+    // --- LÍNEA CLAVE DEL CAMBIO ---
+    // Eliminamos la lógica de "compartir" y dejamos solo .save()
+    // para que la descarga sea directa.
+    doc.save(`proyecto_${safeName}.pdf`);
   }
   
   if (isLoading || !project) {
@@ -136,12 +117,13 @@ export default function ProyectoDetallePage() {
             {project.client ? `Cliente: ${project.client} · ` : ""}{project.siteAddress || ""}
           </div>
         </div>
+        {/* --- BOTONES ACTUALIZADOS --- */}
         <div className="flex items-center space-x-2">
             <Link className="btn btn-secondary" href={`/proyecto/${project.id}/export`}>
               Vista Previa
             </Link>
-            <button className="btn btn-primary" onClick={handleSharePdf}>
-              Compartir PDF
+            <button className="btn btn-primary" onClick={handleDownloadPdf}>
+              Descargar PDF
             </button>
         </div>
       </div>
