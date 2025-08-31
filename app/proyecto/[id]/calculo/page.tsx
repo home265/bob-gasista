@@ -19,6 +19,7 @@ import { getProject, getGasCalculation, saveOrUpdateGasCalculation } from "@/lib
 import { type Project, type MaterialRow } from "@/lib/project/types";
 import { type ComputeResult, type CalculoInput as CalculoInputType } from "@/lib/gas/types";
 import { computeGasInstallation } from "@/lib/gas/compute";
+import HelpPopover from "@/components/ui/HelpPopover";
 
 // Esquemas de validación de Zod
 const plantaSchema = z.object({
@@ -196,20 +197,35 @@ function CalculadoraProyecto() {
             <h2 className="font-medium text-lg border-b border-border pb-2">1. Datos Generales</h2>
             <div className="grid sm:grid-cols-2 gap-4">
               <label className="text-sm flex flex-col gap-1">
-                <span className="font-medium">Tipo de Gas</span>
+                <div className="flex items-center">
+                  <span className="font-medium">Tipo de Gas</span>
+                  <HelpPopover>
+                    Elige el tipo de gas de la instalación. Esto es fundamental ya que el poder calorífico y la presión varían, afectando todo el cálculo de diámetros.
+                  </HelpPopover>
+                </div>
                 <select {...register("gasId")} className="w-full px-3 py-2">
                   {catalogs.gasOptions.map(g => <option key={g.id} value={g.id}>{g.label}</option>)}
                 </select>
               </label>
               <label className="text-sm flex flex-col gap-1">
-                  <span className="font-medium">Sistema de Cañerías</span>
+                  <div className="flex items-center">
+                    <span className="font-medium">Sistema de Cañerías</span>
+                    <HelpPopover>
+                      Selecciona el material de las cañerías. Cada sistema tiene diámetros internos distintos que son clave para un cálculo preciso.
+                    </HelpPopover>
+                  </div>
                   <select {...register("pipeSystemId")} className="w-full px-3 py-2">
                       {catalogs.pipeSystems.map(s => <option key={s.id} value={s.id}>{s.label}</option>)}
                   </select>
               </label>
             </div>
             <div className="space-y-2 pt-2">
-              <label className="text-sm font-medium">Plantas del Proyecto</label>
+              <label className="text-sm font-medium flex items-center">
+                Plantas del Proyecto
+                <HelpPopover>
+                  Define los niveles o plantas de la obra (ej: Planta Baja, Quincho). Esto te ayudará a organizar la ubicación de cada boca.
+                </HelpPopover>
+              </label>
               {plantaFields.map((field, index) => (
                 <div key={field.id} className="flex items-center gap-2">
                    <input 
@@ -217,7 +233,6 @@ function CalculadoraProyecto() {
                       placeholder={`Nombre (Ej: Piso ${index + 1})`}
                       className="w-full px-3 py-2 text-sm"
                    />
-                   {/* --- ESTÉTICA DE BOTONES MEJORADA --- */}
                    <button type="button" onClick={() => removePlanta(index)} className="btn btn-danger" disabled={plantaFields.length <= 1}>
                       Quitar
                    </button>
@@ -230,14 +245,12 @@ function CalculadoraProyecto() {
           </div>
           <div className="space-y-4">
             <h2 className="font-medium text-lg">2. Bocas y Recorrido de la Instalación</h2>
-            {/* --- MEJORA DE UX: BOTÓN "+ Agregar Boca" ELIMINADO DE AQUÍ --- */}
             <div className="space-y-3">
               {bocaFields.map((field, index) => (
                 <BocaCard 
                   key={field.id}
                   index={index}
                   onRemove={() => removeBoca(index)}
-                  // --- MEJORA DE UX: PASAMOS LA FUNCIÓN PARA AÑADIR LA SIGUIENTE BOCA ---
                   onAdd={handleAddBoca}
                   onOpenBalanceTermico={handleOpenBalanceTermico}
                   catalogs={catalogs}
@@ -246,7 +259,6 @@ function CalculadoraProyecto() {
               {bocaFields.length === 0 && (
                 <div className="text-center py-8 text-foreground/60 card">
                   <p>Aún no hay bocas. ¡Agrega la primera para empezar!</p>
-                   {/* --- MEJORA DE UX: BOTÓN INICIAL PARA AÑADIR BOCA --- */}
                   <button type="button" onClick={handleAddBoca} className="btn btn-primary mt-4">
                     + Agregar Primera Boca
                   </button>
@@ -273,7 +285,6 @@ function CalculadoraProyecto() {
                 Guardar Cálculo en el Proyecto
               </button>
             </div>
-            {/* --- INTEGRACIÓN DEL BOCETO --- */}
             <div className="grid md:grid-cols-2 gap-8 items-start">
                 <div>
                     <h3 className="font-medium mb-2">Boceto de la Instalación</h3>

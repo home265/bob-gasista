@@ -2,7 +2,7 @@
 import React, { useEffect, useState } from "react";
 
 type Props = {
-  label: string;
+  label: React.ReactNode;
   name: string;
   unit?: string;
   value: number | string;
