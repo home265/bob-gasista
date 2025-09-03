@@ -3,6 +3,7 @@
 
 import { useState, useEffect } from "react";
 import { calculateBalanceTermico, ZonaClimatica } from "@/lib/calc/balance-termico";
+import NumberWithUnit from "../inputs/NumberWithUnit";
 
 type Props = {
   open: boolean;
@@ -52,9 +53,24 @@ export default function BalanceTermicoModal({ open, onClose, onCalculate, zonas 
           Estima las kcal/h necesarias para calefaccionar un ambiente.
         </p>
         <div className="grid sm:grid-cols-3 gap-3">
-          <label className="text-sm flex flex-col gap-1.5"><span className="font-medium">Largo (m)</span><input type="number" value={largo} onChange={e => setLargo(+e.target.value)} /></label>
-          <label className="text-sm flex flex-col gap-1.5"><span className="font-medium">Ancho (m)</span><input type="number" value={ancho} onChange={e => setAncho(+e.target.value)} /></label>
-          <label className="text-sm flex flex-col gap-1.5"><span className="font-medium">Alto (m)</span><input type="number" value={alto} onChange={e => setAlto(+e.target.value)} /></label>
+          <NumberWithUnit
+            label={<span className="font-medium">Largo (m)</span>}
+            name="largo_m"
+            value={largo}
+            onChange={setLargo}
+          />
+          <NumberWithUnit
+            label={<span className="font-medium">Ancho (m)</span>}
+            name="ancho_m"
+            value={ancho}
+            onChange={setAncho}
+          />
+          <NumberWithUnit
+            label={<span className="font-medium">Alto (m)</span>}
+            name="alto_m"
+            value={alto}
+            onChange={setAlto}
+          />
         </div>
         <label className="text-sm flex flex-col gap-1.5">
           <span className="font-medium">Zona Climática (según norma IRAM 11603)</span>
